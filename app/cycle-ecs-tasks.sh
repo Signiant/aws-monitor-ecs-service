@@ -1,21 +1,31 @@
-#!/usr/local/bin/bash
+#!/bin/bash
+
+# Input parameters
+#   1 - The name of the ECS cluster the service is running in
+#   2 - the region the ECS cluster is running in (ie. us-east-1)
+#   3 - The AWS CLI profile to use
+#   4 - A prefix to match an ECS service (must map to ONLY ONE service)
 
 CLUSTER=$1
 REGION=$2
 PROFILE=$3
-SERVICE_PREFIX=$4
+SERVICE_ARN=$4
 
+# track where we've already seen a task ID
 declare -A tasksSeen
 
-#Algo
+# Main algorithm:
+#    Find the ECS service from the pattern passed in
+#    list the tasks running for this service
+#    for each task
+#      stop it
+#      Wait for a new one to start
 
-# Find the service from the pattern passed in
-# list the tasks in the service and save off the task IDs
-# for each task
-#    Kill it
-#    Wait for a new one
+############################################################
+############## FUNCTIONS ################
+############################################################
 
-# Stops an ECS task and waits for a replacement to come online
+# Stops an ECS task
 stop_task()
 {
   task_arn=$1
@@ -35,6 +45,7 @@ stop_task()
   echo ${retval}
 }
 
+# List the ECS tasks for a service
 list_tasks()
 {
   service=$1
@@ -44,6 +55,7 @@ list_tasks()
   echo "${tasks}"
 }
 
+# Get the status of a task
 get_task_status()
 {
   task_arn=$1
@@ -54,44 +66,47 @@ get_task_status()
   echo "${task_status}"
 }
 
+############################################################
+############## MAIN LINE ################
+############################################################
 
-# Step 1 - get the ARN of the service we are intersted in
-service_arn=$(aws ecs list-services --cluster ${CLUSTER} --region ${REGION} --profile ${PROFILE} --query 'serviceArns' |grep ${SERVICE_PREFIX} |xargs)
-
-if [ ! -z "${service_arn}" ]; then
-  service_arn=${service_arn/%,/}  # remove trailing comma if it exists
-  echo "service arn found: ${service_arn}"
+if [ ! -z "${SERVICE_ARN}" ]; then
+  service_arn=${SERVICE_ARN/%,/}  # remove trailing comma if it exists
+  echo "service arn: ${SERVICE_ARN}"
 
   # Step 2 - list the tasks assigned to this service
-  tasks=$(list_tasks "${service_arn}")
+  tasks=$(list_tasks "${SERVICE_ARN}")
   beginning_number_of_tasks=$(echo ${tasks} |wc -w |xargs)
 
   echo "There are currently ${beginning_number_of_tasks} tasks running for this service"
   echo "Initial tasks: ${tasks}"
 
+  # This the main guts...basically, replace each running task one at a time
+  # And do not kill the next task until a replacement has been launched
   for task in ${tasks}
   do
-    # We need to stop each task and then wait for a replacement before stopping the next one
-    echo "calling STOP on task: ${task}"
-    #status=0
+    echo "**** Stopping task: ${task}"
     status=$(stop_task ${task})
     status=$?
 
     if [ "${status}" -eq 0 ]; then
-      # task stopped ok...now wait until we get a new task in the RUNNING condition
-      echo "Task stopped ok"
+      # task stopped ok...now wait until we get a new task in the RUNNING state
+      echo "Task ${task} stopped OK"
 
+      # Track the current number of running tasks and an array to keep track
+      # of which ones we've seen running
       current_number_of_tasks=0
       tasksSeen=()
+
       # Loop while we do not have the same number of RUNNING tasks as we originally had
       while (( ${current_number_of_tasks} < ${beginning_number_of_tasks} ))
       do
-        current_tasks=$(list_tasks "${service_arn}")
+        current_tasks=$(list_tasks "${SERVICE_ARN}")
 
         for current_task in ${current_tasks}
         do
           if [ "${tasksSeen[${current_task}]+exists}" == "exists" ]; then
-            echo "task ${current_task} has already been seen"
+            echo "task ${current_task} has already been seen and is RUNNING. Waiting for new task to start..."
           else
             # is this task RUNNING?
             task_state=$(get_task_status ${current_task})
@@ -108,16 +123,7 @@ if [ ! -z "${service_arn}" ]; then
     else
       echo "error stopping task"
     fi
-
   done
+else
+  echo "Unable to find an ECS service in cluster ${CLUSTER} with ARN ${SERVICE_ARN}"
 fi
-
-#aws cloudwatch get-metric-statistics --metric-name MemoryUtilization --namespace AWS/ECS --statistics Average --dimensions Name=ClusterName,Value=Signiant-ECS-DEV1-us-east1 Name=ServiceName,Value=storage-server-communicator-service-endeavour-SSCOMMSRVConfig-B9BS3ONDP0WX --start-time 2016-08-10T00:00:00 --end-time 2016-08-10T23:59:59 --period 3600
-
-#aws ecs list-services --cluster Signiant-ECS-DEV1-us-east1 --profile dev1 --region us-east-1
-
-#aws ecs list-tasks --cluster Signiant-ECS-DEV1-us-east1 --service-name arn:aws:ecs:us-east-1:367384020442:service/storage-server-communicator-service-endeavour-SSCOMMSRVConfig-B9BS3ONDP0WX --profile dev1 --region us-east-1
-
-#aws ecs stop-task --cluster Signiant-ECS-DEV1-us-east1 --task arn:aws:ecs:us-east-1:367384020442:task/3daa818a-11fc-4da0-92b5-ec26f255fcc2 --reason memory --region us-east-1 --profile dev1
-
-#aws ecs describe-tasks --cluster Signiant-ECS-DEV1-us-east1 --tasks arn:aws:ecs:us-east-1:367384020442:task/de525be5-822a-4ab1-bd9a-7cea4deefe70 --region us-east-1 --profile dev1
