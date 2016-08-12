@@ -1,4 +1,4 @@
-# monitor-ecs-service
+# aws-monitor-ecs-service
 Monitors an ECS service for memory use and cycles the tasks if the memory use is over a threshold
 
 # Purpose
@@ -22,7 +22,7 @@ docker pull signiant/monitor-ecs-service
 ```bash
 docker run \
   -v ~/.aws/credentials:/root/.aws/credentials:ro  \
-   signiant/monitor-ecs-service \
+   signiant/aws-monitor-ecs-service \
         my_ecs_cluster \
         us-east-1 \
         development \
