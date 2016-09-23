@@ -9,11 +9,11 @@ However....manual work sucks. So we've developed this solution which will auto-c
 
 # Prerequisites
 * Docker must be installed
-* A [config file](http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html) containing profiles needs to be configured for the AWS CLI
+* Either an AWS role (if running on EC2) or an access key/secret key
 
 # Usage
 
-The easiest way to run the tool is from docker (because docker rocks).  You will need to bind mount the AWS config file and pass in variables specific to the ECS service you want to affect
+The easiest way to run the tool is from docker (because docker rocks).  You will need to  pass in variables specific to the ECS service you want to affect
 
 ```bash
 docker pull signiant/monitor-ecs-service
@@ -21,21 +21,31 @@ docker pull signiant/monitor-ecs-service
 
 ```bash
 docker run \
-  -v ~/.aws/credentials:/root/.aws/credentials:ro  \
    signiant/aws-monitor-ecs-service \
         my_ecs_cluster \
         us-east-1 \
-        development \
         my-ecs-service-prefix \
         70
 ```
 
-In this example, we use a bindmount to mount in the aws cli configuration (containing profiles) config file from a local folder to the container.  The other arguments after the image name are
+In this example, the arguments after the image name are
 
 * ECS cluster name
 * AWS region
-* AWS CLI profile name
 * Prefix of an ECS service
 * Memory threshold to take action on
 
 In the above example, we query the cluster for a service beginning with mys-ecs-service-prefix (done this way because cloudformation generated services have a random suffix appended).  Once we have found the service, we check the metrics for the last hour and if we are over 70% of the memory reservation, cycle each task currently running for the service, one at a time.
+
+To use an AWS access key/secret key rather than a role:
+
+```bash
+docker run \
+  -e AWS_ACCESS_KEY_ID=XXXXXX \
+  -e AWS_SECRET_ACCESS_KEY=XXXXX \
+   signiant/aws-monitor-ecs-service \
+        my_ecs_cluster \
+        us-east-1 \
+        my-ecs-service-prefix \
+        70
+```

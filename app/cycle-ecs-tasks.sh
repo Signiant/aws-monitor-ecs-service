@@ -3,13 +3,11 @@
 # Input parameters
 #   1 - The name of the ECS cluster the service is running in
 #   2 - the region the ECS cluster is running in (ie. us-east-1)
-#   3 - The AWS CLI profile to use
-#   4 - A prefix to match an ECS service (must map to ONLY ONE service)
+#   3 - A prefix to match an ECS service (must map to ONLY ONE service)
 
 CLUSTER=$1
 REGION=$2
-PROFILE=$3
-SERVICE_ARN=$4
+SERVICE_ARN=$3
 
 # track where we've already seen a task ID
 declare -A tasksSeen
@@ -33,7 +31,7 @@ stop_task()
 
   echo "Stopping ${task_arn}" >&2
 
-  aws ecs stop-task --cluster ${CLUSTER} --region ${REGION} --profile ${PROFILE} --task ${task_arn} --reason "killed by monitor"
+  aws ecs stop-task --cluster ${CLUSTER} --region ${REGION} --task ${task_arn} --reason "killed by monitor"
   status=$?
 
   if [ ${status} -eq 0 ]; then
@@ -50,7 +48,7 @@ list_tasks()
 {
   service=$1
 
-  tasks=$(aws ecs list-tasks --cluster ${CLUSTER} --region ${REGION} --profile ${PROFILE} --service-name ${service} --query 'taskArns' --output text)
+  tasks=$(aws ecs list-tasks --cluster ${CLUSTER} --region ${REGION} --service-name ${service} --query 'taskArns' --output text)
 
   echo "${tasks}"
 }
@@ -61,7 +59,7 @@ get_task_status()
   task_arn=$1
   task_status=""
 
-  task_status=$(aws ecs describe-tasks --cluster ${CLUSTER} --region ${REGION} --profile ${PROFILE} --tasks ${task_arn} --output text --query 'tasks[0].lastStatus')
+  task_status=$(aws ecs describe-tasks --cluster ${CLUSTER} --region ${REGION} --tasks ${task_arn} --output text --query 'tasks[0].lastStatus')
 
   echo "${task_status}"
 }
